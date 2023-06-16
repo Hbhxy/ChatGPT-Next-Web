@@ -3,6 +3,8 @@ import { getServerSideConfig } from "../config/server";
 import md5 from "spark-md5";
 import { ACCESS_CODE_PREFIX } from "../constant";
 
+const serverConfig = getServerSideConfig();
+
 function getIP(req: NextRequest) {
   let ip = req.ip ?? req.headers.get("x-real-ip");
   const forwardedFor = req.headers.get("x-forwarded-for");
@@ -32,7 +34,6 @@ export function auth(req: NextRequest) {
 
   const hashedCode = md5.hash(accessCode ?? "").trim();
 
-  const serverConfig = getServerSideConfig();
   console.log("[Auth] allowed hashed codes: ", [...serverConfig.codes]);
   console.log("[Auth] got access code:", accessCode);
   console.log("[Auth] hashed access code:", hashedCode);
@@ -42,7 +43,8 @@ export function auth(req: NextRequest) {
   if (serverConfig.needCode && !serverConfig.codes.has(hashedCode) && !token) {
     return {
       error: true,
-      msg: !accessCode ? "empty access code" : "wrong access code",
+      needAccessCode: true,
+      msg: "Please go settings page and fill your access code.",
     };
   }
 
@@ -54,9 +56,37 @@ export function auth(req: NextRequest) {
       req.headers.set("Authorization", `Bearer ${apiKey}`);
     } else {
       console.log("[Auth] admin did not provide an api key");
+      return {
+        error: true,
+        msg: "Empty Api Key",
+      };
     }
   } else {
     console.log("[Auth] use user api key");
+  }
+
+  return {
+    error: false,
+  };
+}
+
+export function authMj(req: NextRequest) {
+  console.log("[Auth] allowed hashed codes: ", [...serverConfig.codes]);
+  console.log("[User IP] ", getIP(req));
+  console.log("[Time] ", new Date().toLocaleString());
+
+  // 注入midjourneyAPI
+  const midJourneyKey = req.headers.get("token")
+    ? req.headers.get("token")
+    : serverConfig.midJourneyKey;
+  console.log(">>> 注入midjourneyAPI: ", midJourneyKey);
+  if (midJourneyKey) {
+    req.headers.set("token", midJourneyKey);
+  } else {
+    return {
+      error: true,
+      msg: "Empty Midjourney Api Key. Go to: [MidjourneyAPI](https://midjourneyapi.zxx.im/)",
+    };
   }
 
   return {
